@@ -24,8 +24,9 @@ GitHub Pages는 `main` 브랜치의 `/`에서 배포합니다. `.nojekyll`을 �
 
 ## 외부 서비스와 라이선스
 
-- 단축 URL: [is.gd API](https://is.gd/apishorteningreference.php). 사용자가 변환을 요청하면 입력한 URL을 is.gd로 전달합니다. 서비스의 응답과 이용 제한에 따라 단축이 일시적으로 실패할 수 있으며 화면에 실패 상태를 표시합니다.
+- 단축 URL: [da.gd API](https://da.gd/help). 사용자가 변환을 요청하면 입력한 URL을 da.gd로 전달합니다. 서비스의 응답과 이용 제한에 따라 단축이 일시적으로 실패할 수 있으며 화면에 실패 상태를 표시합니다.
 - QR 생성: 로컬에 포함한 [qrcode-generator](https://github.com/kazuhikoarase/qrcode-generator), MIT 라이선스. 라이선스 전문은 `assets/vendor/LICENSE-qrcode-generator.txt`에 있습니다.
 - QR 생성에는 서버, 로그인, API 키가 필요하지 않습니다.
+- 새로 만든 단축 링크는 da.gd의 연결 확인 화면에 표시된 원본 주소를 클릭해야 열릴 수 있습니다.
 
 제출 PDF와 학번 등 제출자 정보는 이 공개 저장소에 포함하지 않습니다.

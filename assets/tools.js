@@ -1,5 +1,5 @@
 /* Local QR generation: qrcode-generator 1.4.4 (MIT), vendored in assets/vendor.
- * Public short links: https://is.gd/apishorteningreference.php (JSONP API).
+ * Public short links: https://da.gd/help/ (CORS-enabled /s endpoint).
  * No keys, local redirect mappings, or user URL history are stored. */
 (() => {
   'use strict';
@@ -88,63 +88,67 @@
     byId('original-url').textContent = isShort ? `원본: ${original}` : 'QR을 스캔하면 위의 원본 주소로 이동합니다.';
     byId('qr-caption').textContent = isShort ? '단축 링크로 연결되는 QR' : '원본 링크로 연결되는 QR';
     byId('retry-button').hidden = !fallback;
-    byId('result-footnote').textContent = fallback ? '단축 URL 생성에 실패했어요. 현재 QR은 원본 URL에 연결됩니다.' : isShort ? '완료! 단축 URL과 QR은 같은 원본 페이지로 연결됩니다.' : '완료! QR 이미지를 저장하거나 원본 링크를 복사하세요.';
+    byId('result-footnote').textContent = fallback ? '단축 URL 생성에 실패했어요. 현재 QR은 원본 URL에 연결됩니다.' : isShort ? '새로 만든 단축 링크는 da.gd의 연결 확인 화면을 거칠 수 있어요.' : '완료! QR 이미지를 저장하거나 원본 링크를 복사하세요.';
     tag.textContent = fallback ? 'QR ONLY' : 'READY TO SHARE';
     tag.dataset.ready = 'true';
     empty.hidden = true;
     result.hidden = false;
   }
 
-  function shortenUrl(url) {
-    return new Promise((resolve, reject) => {
-      const callback = `qrnshort_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-      const script = document.createElement('script');
-      let settled = false;
-      let timeout;
-      function finish(error, value) {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timeout);
-        script.remove();
-        // A late JSONP response is harmless after a timeout or reset.
-        window[callback] = () => {};
-        setTimeout(() => { delete window[callback]; }, 60000);
-        cancelRequest = null;
-        if (error) reject(error); else resolve(value);
-      }
-      window[callback] = response => {
-        if (response && response.shorturl) {
-          let short;
-          try { short = new URL(response.shorturl); } catch { finish(new Error('단축 서비스에서 올바른 링크를 받지 못했어요.')); return; }
-          if (!['http:', 'https:'].includes(short.protocol) || short.hostname !== 'is.gd') {
-            finish(new Error('단축 서비스에서 올바른 링크를 받지 못했어요.')); return;
-          }
-          short.protocol = 'https:';
-          finish(null, short.href);
-          return;
-        }
-        const code = Number(response && response.errorcode);
-        if (code === 3) {
-          retryAfter = Date.now() + 60000;
-          finish(new Error('단축 서비스의 요청 한도에 도달했어요. 1분 후 다시 시도해 주세요.'));
-        } else if (code === 1 || code === 2) {
-          finish(new Error('단축 서비스가 이 주소를 처리하지 못했어요. 공개된 웹 주소인지 확인해 주세요.'));
-        } else {
-          finish(new Error('단축 서비스가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.'));
-        }
-      };
-      script.onerror = () => finish(new Error('단축 서비스에 연결하지 못했어요. 인터넷 연결을 확인한 후 다시 시도해 주세요.'));
-      const api = new URL('https://is.gd/create.php');
-      api.searchParams.set('format', 'json');
-      api.searchParams.set('callback', callback);
+  async function shortenUrl(url) {
+    const controller = new AbortController();
+    const cancelThisRequest = () => controller.abort();
+    cancelRequest = cancelThisRequest;
+    let timedOut = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, 15000);
+    try {
+      const api = new URL('https://da.gd/s');
       api.searchParams.set('url', url);
-      script.src = api.href;
-      script.referrerPolicy = 'no-referrer';
-      script.async = true;
-      timeout = setTimeout(() => finish(new Error('단축 서비스 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.')), 18000);
-      cancelRequest = () => finish(new Error('cancelled'));
-      document.head.append(script);
-    });
+      const response = await fetch(api.href, {
+        method: 'GET',
+        mode: 'cors',
+        credentials: 'omit',
+        referrerPolicy: 'no-referrer',
+        cache: 'no-store',
+        headers: { Accept: 'text/plain' },
+        signal: controller.signal
+      });
+      if (response.status === 429) {
+        const header = response.headers.get('Retry-After');
+        let waitMs = 60000;
+        if (header) {
+          const seconds = Number(header);
+          const date = Date.parse(header);
+          if (Number.isFinite(seconds) && seconds >= 0) waitMs = seconds * 1000;
+          else if (Number.isFinite(date)) waitMs = Math.max(0, date - Date.now());
+        }
+        retryAfter = Date.now() + waitMs;
+        throw new Error(`단축 서비스의 요청 한도에 도달했어요. ${Math.ceil(waitMs / 1000)}초 후 다시 시도해 주세요.`);
+      }
+      if ([400, 403, 422].includes(response.status)) throw new Error('단축 서비스가 이 주소를 처리하지 못했어요. 공개된 웹 주소인지 확인해 주세요.');
+      if (!response.ok) throw new Error('단축 서비스가 잠시 응답하지 않아요. 잠시 후 다시 시도해 주세요.');
+      const text = (await response.text()).trim();
+      let short;
+      try { short = new URL(text); } catch { throw new Error('단축 서비스에서 올바른 링크를 받지 못했어요. 잠시 후 다시 시도해 주세요.'); }
+      if (!['http:', 'https:'].includes(short.protocol) || short.hostname !== 'da.gd' || short.username || short.password || short.pathname === '/') {
+        throw new Error('단축 서비스에서 올바른 링크를 받지 못했어요.');
+      }
+      short.protocol = 'https:';
+      return short.href;
+    } catch (error) {
+      if (error.name === 'AbortError') {
+        throw new Error(timedOut ? '단축 서비스 응답 시간이 초과됐어요. 잠시 후 다시 시도해 주세요.' : 'cancelled');
+      }
+      if (error instanceof TypeError) throw new Error('단축 서비스에 연결하지 못했어요. 인터넷 연결을 확인한 후 다시 시도해 주세요.');
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+      // A reset may already have started another request. Only clear ours.
+      if (cancelRequest === cancelThisRequest) cancelRequest = null;
+    }
   }
 
   async function generate(event) {
