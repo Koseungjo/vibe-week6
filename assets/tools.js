@@ -31,9 +31,14 @@
     status.dataset.kind = kind;
   }
 
+  function syncGenerateState() {
+    submit.disabled = busy || !input.value.trim();
+    submit.dataset.busy = String(busy);
+  }
+
   function setBusy(value) {
     busy = value;
-    submit.disabled = value;
+    syncGenerateState();
     byId('example-button').disabled = value;
     input.readOnly = value;
     label.textContent = value ? '단축 링크를 만들고 있어요…' : initialLabel;
@@ -169,7 +174,7 @@
     if (!shortMode) {
       try {
         showResult(original, original, false);
-        announce('QR 코드가 완성됐어요. PNG로 저장하거나 링크를 복사해 보세요.', 'success');
+        announce('QR 코드가 완성됐어요. QR을 누르면 JPG로, PNG 저장 버튼을 누르면 PNG로 저장돼요.', 'success');
       } catch (error) { announce(error.message || 'QR 생성에 실패했어요. 주소를 확인해 주세요.', 'error'); }
       return;
     }
@@ -200,19 +205,21 @@
   byId('retry-button').addEventListener('click', generate);
   byId('example-button').addEventListener('click', () => {
     input.value = 'https://koseungjo.github.io/vibe-week6/';
+    syncGenerateState();
     input.setAttribute('aria-invalid', 'false');
     announce('예시 주소를 넣었어요. 만들기 버튼을 눌러 변환해 보세요.');
     input.focus();
   });
   input.addEventListener('input', () => {
+    syncGenerateState();
     input.setAttribute('aria-invalid', 'false');
     if (!busy) announce(result.hidden ? initialStatus : '주소를 변경했어요. 만들기 버튼을 누르면 결과가 갱신됩니다.');
   });
   byId('reset-button').addEventListener('click', () => {
     revision++;
     if (cancelRequest) cancelRequest();
-    setBusy(false);
     input.value = '';
+    setBusy(false);
     input.setAttribute('aria-invalid', 'false');
     outputUrl = '';
     result.hidden = true;
@@ -244,21 +251,28 @@
       announce('자동 복사를 사용할 수 없어요. 결과의 링크를 길게 누르거나 마우스 오른쪽 버튼으로 복사해 주세요.', 'error');
     }
   });
-  byId('download-button').addEventListener('click', () => {
+  function downloadQr(format) {
     if (!outputUrl) return;
+    const mimeType = format === 'jpg' ? 'image/jpeg' : 'image/png';
+    const filename = `${generatedShort ? 'qrnshort' : 'url2qr'}-qr.${format}`;
     canvas.toBlob(blob => {
-      if (!blob) { announce('이미지를 저장하지 못했어요. 다시 시도해 주세요.', 'error'); return; }
+      if (!blob || blob.type !== mimeType) {
+        announce(`${format.toUpperCase()} 이미지를 저장하지 못했어요. 다른 저장 형식을 사용해 주세요.`, 'error');
+        return;
+      }
       const blobUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.download = generatedShort ? 'qrnshort-qr.png' : 'url2qr-qr.png';
+      link.download = filename;
       link.href = blobUrl;
       document.body.append(link);
       link.click();
       link.remove();
       setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
-      announce('QR 이미지 저장을 시작했어요. 다운로드 폴더를 확인해 주세요.', 'success');
-    }, 'image/png');
-  });
+      announce(`${format.toUpperCase()} QR 이미지 저장을 시작했어요. 다운로드 폴더를 확인해 주세요.`, 'success');
+    }, mimeType, format === 'jpg' ? 0.95 : undefined);
+  }
+  byId('download-button').addEventListener('click', () => downloadQr('png'));
+  byId('qr-download-button').addEventListener('click', () => downloadQr('jpg'));
 
   // Carry the user's original address between the two tools, without
   // performing a third-party request until they explicitly press Generate.
@@ -281,4 +295,5 @@
       announce('전달된 주소의 형식을 확인할 수 없어요. 웹 주소를 직접 입력해 주세요.', 'error');
     }
   }
+  syncGenerateState();
 })();
